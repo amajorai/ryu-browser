@@ -1,0 +1,70 @@
+appId: ai.amajor.ryu.browser
+productName: Ryu Browser
+# Stable, version-less artifact names so Core's managed-companion install (mirroring
+# ryu-core's `install.rs`: download to `~/.ryu/bin`, temp `.download` then rename) can
+# hardcode a `releases/latest/download/<name>` URL. Without a pinned name
+# electron-builder emits version-stamped, space-containing defaults ("Ryu Browser
+# 1.0.0.dmg") that no fixed URL resolves. Every target below differs by extension, so
+# one template is unambiguous — except the Windows `portable` `.exe`, which gets an
+# explicit `-portable` override so it never collides with any other `.exe`.
+# Resolution at runtime: the `com.ryu.browser` manifest declares `command: "ryu-browser"`
+# (bare name found on `PATH`, which includes `~/.ryu/bin`) with `command_env:
+# "RYU_BROWSER_BIN"` as the dev/override escape hatch.
+artifactName: ryu-browser-${os}-${arch}.${ext}
+directories:
+  output: artifacts
+  # `resources/` (not the conventional `build/`, which the root .gitignore excludes)
+  # so any tracked build resource reaches CI. If a `resources/icon.png` is added later
+  # electron-builder auto-derives the per-target icons from it; absent one it falls back
+  # to the default Electron icon (a cosmetic follow-on, not a packaging blocker).
+  buildResources: resources
+# electron-vite emits main/preload/renderer bundles into out/; package those plus the
+# manifest. `resources/**` carries any `?asset` files the main bundle references.
+# Everything else (src, dev deps) is excluded. No native module here (unlike island's
+# `uiohook-napi`), so there is nothing to `asarUnpack`.
+files:
+  - out/**
+  - resources/**
+  - package.json
+# Windows: `portable` is the spawnable single-exe target (no install step). It
+# self-extracts to a temp dir on launch, so a Core-managed install can download this
+# one file and spawn it directly as `ryu-browser`, exactly like the self-contained
+# `ryu-core` binary. This sidecar is Core-driven (lazy spawn + idle-stop), so the
+# interactive NSIS installer island ships for standalone users is intentionally omitted.
+win:
+  target:
+    - portable
+# Stable name (no version) so
+# `releases/latest/download/ryu-browser-windows-<arch>-portable.exe` always resolves,
+# and distinct from any other `.exe` in the release.
+portable:
+  artifactName: ryu-browser-${os}-${arch}-portable.${ext}
+# macOS: ship `zip` (the spawnable form — Core extracts it and execs the inner
+# `Ryu Browser.app/Contents/MacOS/Ryu Browser`) plus an optional `dmg` for manual
+# download. `LSUIElement: true` makes it an accessory app (no Dock icon, no app menu):
+# the browser window is Core-driven and incidental (see `src/main/index.ts`), so it runs
+# as a background sidecar like island. Code signing / notarization stays out of scope —
+# unsigned builds run with a Gatekeeper warning; CI signing is a follow-on.
+mac:
+  category: public.app-category.utilities
+  target:
+    - zip
+    - dmg
+  extendInfo:
+    LSUIElement: true
+# Linux: AppImage — a portable, directly-spawnable single file (chmod +x then exec),
+# the Linux analogue of the Windows portable exe.
+linux:
+  category: Utility
+  target:
+    - AppImage
+# Release feed: GitHub releases on the canonical Ryu repo, matching Core's `RYU_REPO`
+# ("amajorai/ryu") and island's publish block — the browser bundles land in the same
+# matching `v{version}` release the desktop, core binaries, and island are mirrored into.
+# Core downloads the artifact by its stable name from this repo's `latest` release;
+# electron-updater is not used (Core owns this sidecar's lifecycle, not self-update).
+publish:
+  provider: github
+  owner: amajorai
+  repo: ryu
+  releaseType: release
