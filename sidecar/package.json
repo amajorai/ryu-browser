@@ -1,0 +1,31 @@
+{
+  "name": "@ryu/browser-sidecar",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev:standalone": "electron-vite dev",
+    "build": "electron-vite build",
+    "dist": "electron-vite build && bunx electron-builder --config electron-builder.yml",
+    "dist:mac": "electron-vite build && bunx electron-builder --mac --config electron-builder.yml",
+    "dist:win": "electron-vite build && bunx electron-builder --win --config electron-builder.yml",
+    "dist:linux": "electron-vite build && bunx electron-builder --linux --config electron-builder.yml",
+    "preview": "electron-vite preview",
+    "check-types": "tsc --noEmit",
+    "test": "bun test src",
+    "clean": "rm -rf out artifacts && rm -f electron.vite.config.*.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "electron": "^33.2.1",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5",
+    "vite": "^6"
+  },
+  "author": {
+    "name": "A Major Pte. Ltd.",
+    "email": "hello@ryuhq.com"
+  },
+  "homepage": "https://ryuhq.com"
+}

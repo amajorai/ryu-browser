@@ -1,0 +1,10 @@
+{
+  "name": "@ryu/browser-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Companion package placeholder for the Ryu Browser app. The Browser app has no companion UI in this tree: its surface is the desktop workspace TabKind panel (apps/desktop), which drives the Electron sidecar through the generic ext-proxy. This package therefore ships only a contract test over the shipped manifest.json manifest.",
+  "scripts": {
+    "test": "bun test"
+  }
+}
