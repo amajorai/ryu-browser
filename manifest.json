@@ -1,0 +1,445 @@
+{
+  "id": "@ryu/browser",
+  "name": "Browser",
+  "version": "1.0.0",
+  "description": "A real-Chromium browser (Electron) Ryu runs as a local sidecar and exposes as the grant-gated `browser.control` capability: list/open/navigate tabs, screenshot, read titles, take an accessibility snapshot with stable element refs, and drive the page with synthetic click/type/scroll input. Core spawns the sidecar lazily and idle-stops it; the desktop Browser panel drives it through the ext-proxy.",
+  "tagline": "Real-Chromium browser control for agents",
+  "category": "Automation",
+  "engines": {
+    "ryu": ">=0.0.1"
+  },
+  "runnables": [
+    {
+      "id": "tool-browser-list-tabs",
+      "name": "List Browser Tabs",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__list_tabs",
+        "backend": "http",
+        "method": "GET",
+        "url": "core:/api/ext/@ryu/browser/tabs",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "List the tabs currently open in the local Chromium browser sidecar. Returns `{tabs:[{id,url,title}]}`; the `id` is what every other browser tool takes. When the sidecar is not running the tool reports itself unavailable.",
+        "input_schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    {
+      "id": "tool-browser-open-tab",
+      "name": "Open Browser Tab",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__open_tab",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/tabs",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Open a NEW tab in the local Chromium browser at `url` and return `{tab:{id,url,title}}`. Use the returned `id` with the other browser tools. To move an EXISTING tab, use chromium__navigate_tab instead.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "URL to load in the new tab (the sidecar defaults to about:blank when omitted)."
+            }
+          },
+          "required": ["url"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-tab-detail",
+      "name": "Browser Tab Detail",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__tab_detail",
+        "backend": "http",
+        "method": "GET",
+        "url": "core:/api/ext/@ryu/browser/tabs/{id}",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Fetch one tab's current `{tab:{id,url,title}}` by tab id. 404s once the tab has been closed.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Tab id, as returned by chromium__list_tabs or chromium__open_tab."
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-navigate-tab",
+      "name": "Navigate Browser Tab",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__navigate_tab",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/tabs/{id}/navigate",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Navigate an EXISTING tab to `url` and return `{tab:{id,url,title}}`. Requires a tab id from chromium__list_tabs or chromium__open_tab; 404s once the tab has been closed.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Tab id to navigate."
+            },
+            "url": {
+              "type": "string",
+              "description": "URL to load in that tab."
+            }
+          },
+          "required": ["id", "url"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-screenshot-tab",
+      "name": "Screenshot Browser Tab",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__screenshot_tab",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/tabs/{id}/screenshot",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Capture a PNG screenshot of one tab. Returns `{image,encoding:\"base64\",mime:\"image/png\"}`. Requires a tab id from chromium__list_tabs or chromium__open_tab.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Tab id to capture."
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-tab-title",
+      "name": "Browser Tab Title",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__tab_title",
+        "backend": "http",
+        "method": "GET",
+        "url": "core:/api/ext/@ryu/browser/tabs/{id}/title",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Read one tab's current document title as `{title}`. Cheaper than a screenshot for confirming a navigation landed.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Tab id whose title to read."
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-snapshot-tab",
+      "name": "Snapshot Browser Tab",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__snapshot_tab",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/tabs/{id}/snapshot",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Read one tab's accessibility tree. Returns `{tab,snapshot_id,elements:[{ref,role,name,value,depth,props}],truncated}`, where each `ref` (`@e1`, `@e2`, …) is the handle chromium__click and chromium__type take. Refs are minted fresh by every snapshot and are dropped when the tab navigates, so snapshot again after any action that changes the page. Content inside cross-origin iframes is not included.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Tab id to snapshot, as returned by chromium__list_tabs or chromium__open_tab."
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-click",
+      "name": "Click Browser Element",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__click",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/click",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Click the element a chromium__snapshot_tab `ref` names, using a real mouse event at the element's centre. Returns `{ok,tab,x,y}`. A ref the current snapshot does not know, or whose element is hidden or gone, is a 400 telling you to snapshot again — it never falls back to another element.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "type": "string",
+              "description": "Element reference from a prior chromium__snapshot_tab, e.g. \"@e3\"."
+            },
+            "tab_id": {
+              "type": "string",
+              "description": "Tab to act on. Omit for the tab the browser is currently showing (a snapshot focuses the tab it reads)."
+            }
+          },
+          "required": ["ref"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-type",
+      "name": "Type Into Browser Element",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__type",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/type",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Focus the element a chromium__snapshot_tab `ref` names and insert `text` at its caret, optionally pressing Enter. Text is APPENDED by default — set `replace` to overwrite a field that already has a value. A `ref` that is focusable but cannot accept text (a link, a read-only or disabled input, a checkbox) is a 400 rather than a silent no-op. Returns `{ok,tab}`.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "type": "string",
+              "description": "Element reference from a prior chromium__snapshot_tab, e.g. \"@e3\"."
+            },
+            "text": {
+              "type": "string",
+              "description": "Text to insert at the element's caret."
+            },
+            "replace": {
+              "type": "boolean",
+              "description": "Overwrite the field's current value instead of appending to it. Use `replace` with an empty `text` to clear a field."
+            },
+            "submit": {
+              "type": "boolean",
+              "description": "Press Enter after typing (a real key event, so form/search handlers fire)."
+            },
+            "tab_id": {
+              "type": "string",
+              "description": "Tab to act on. Omit for the tab the browser is currently showing."
+            }
+          },
+          "required": ["ref", "text"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-scroll",
+      "name": "Scroll Browser Tab",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__scroll",
+        "backend": "http",
+        "method": "POST",
+        "url": "core:/api/ext/@ryu/browser/scroll",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Scroll a tab's viewport with a real wheel event dispatched at its centre. `amount` is a distance in CSS pixels; omitted it travels 80% of the viewport. Returns `{ok,tab,x,y}`. Snapshot again afterwards — scrolling changes what is laid out.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "direction": {
+              "type": "string",
+              "enum": ["up", "down", "left", "right"],
+              "description": "Direction to scroll the page in."
+            },
+            "amount": {
+              "type": "integer",
+              "description": "Scroll distance in CSS pixels. Defaults to 80% of the viewport."
+            },
+            "tab_id": {
+              "type": "string",
+              "description": "Tab to act on. Omit for the tab the browser is currently showing."
+            }
+          },
+          "required": ["direction"]
+        }
+      }
+    },
+    {
+      "id": "tool-browser-close-tab",
+      "name": "Close Browser Tab",
+      "kind": "tool",
+      "config": {
+        "slug": "chromium__close_tab",
+        "backend": "http",
+        "method": "DELETE",
+        "url": "core:/api/ext/@ryu/browser/tabs/{id}",
+        "secret_headers": {
+          "Authorization": "Bearer env:RYU_TOKEN"
+        },
+        "fail_open": true,
+        "unwrap_body": true,
+        "description": "Close one tab and return `{ok:true}`. 404s when the tab is already gone.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Tab id to close."
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    }
+  ],
+  "sidecars": [
+    {
+      "name": "browser",
+      "process": {
+        "kind": "local",
+        "command": "ryu-browser",
+        "command_env": "RYU_BROWSER_BIN",
+        "port_env": "RYU_BROWSER_PORT"
+      },
+      "port": 7993,
+      "health_path": "/health",
+      "lazy": true,
+      "idle_stop_secs": 300,
+      "http": {
+        "routes": [
+          {
+            "path": "/"
+          },
+          {
+            "path": "/health"
+          },
+          {
+            "path": "/tabs"
+          },
+          {
+            "path": "/tabs/:id"
+          },
+          {
+            "path": "/tabs/:id/navigate"
+          },
+          {
+            "path": "/tabs/:id/screenshot"
+          },
+          {
+            "path": "/tabs/:id/eval"
+          },
+          {
+            "path": "/tabs/:id/snapshot"
+          },
+          {
+            "path": "/tabs/:id/title"
+          },
+          {
+            "path": "/click"
+          },
+          {
+            "path": "/type"
+          },
+          {
+            "path": "/scroll"
+          }
+        ]
+      }
+    }
+  ],
+  "provides": [
+    {
+      "capability": "browser.control",
+      "version": "1.0.0",
+      "sidecar": "browser",
+      "route": "/",
+      "grant": "browser:control",
+      "selectable": true,
+      "default": true,
+      "target": "local-machine",
+      "tools": {
+        "browser__tabs": {
+          "tool": "chromium__list_tabs"
+        },
+        "browser__navigate": {
+          "tool": "chromium__open_tab"
+        },
+        "browser__screenshot": {
+          "tool": "chromium__screenshot_tab",
+          "args": {
+            "tab_id": "id"
+          }
+        },
+        "browser__snapshot": {
+          "tool": "chromium__snapshot_tab",
+          "args": {
+            "tab_id": "id"
+          }
+        },
+        "browser__click": {
+          "tool": "chromium__click"
+        },
+        "browser__type": {
+          "tool": "chromium__type"
+        },
+        "browser__scroll": {
+          "tool": "chromium__scroll"
+        }
+      }
+    }
+  ],
+  "permission_grants": ["browser:control", "tool:http-egress:127.0.0.1"],
+  "contributes": {
+    "dock_panels": [
+      {
+        "id": "browser",
+        "title": "Browser",
+        "icon": "hugeicons:globe-02",
+        "placement": "both",
+        "panel": "native"
+      }
+    ]
+  }
+}
