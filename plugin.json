@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ryu.browser",
+  "version": "0.1.15",
+  "description": "A real-Chromium browser (Electron) Ryu runs as a local sidecar and exposes as the grant-gated `browser.control` capability: control tabs, capture screenshots and accessibility snapshots, inspect DOM context, attach frozen-frame annotations, and drive pages with element or coordinate mouse/keyboard input. Core spawns the sidecar lazily and idle-stops it; the desktop Browser panel drives it through the ext-proxy.",
+  "author": {
+    "name": "Ryu",
+    "url": "https://ryuhq.com"
+  },
+  "homepage": "https://github.com/amajorai/ryu-browser",
+  "repository": "https://github.com/amajorai/ryu-browser",
+  "keywords": [
+    "browser",
+    "chromium",
+    "automation",
+    "web"
+  ],
+  "extensions": {
+    "com.ryuhq.ryu": {
+      "id": "@ryu/browser",
+      "displayName": "Browser"
+    }
+  }
+}
