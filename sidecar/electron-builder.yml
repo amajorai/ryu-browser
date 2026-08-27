@@ -1,0 +1,90 @@
+appId: ai.amajor.ryu.browser
+productName: Ryu Browser
+# Stable, version-less artifact names: without a pinned name electron-builder emits
+# version-stamped, space-containing defaults ("Ryu Browser 1.0.0.dmg") that no fixed URL
+# resolves. Every target below differs by extension, so one template is unambiguous —
+# except the Windows `portable` `.exe`, which gets an explicit `-portable` override so it
+# never collides with any other `.exe`.
+#
+# ⚠ NOT YET INSTALLABLE BY CORE — read before assuming these names are the contract.
+# The `@ryu/browser` manifest declares a `local` sidecar (`command: "ryu-browser"`,
+# `command_env: "RYU_BROWSER_BIN"`), and Core's download-on-enable
+# (`manifest_sidecar::ensure_local_sidecar_present`) fetches exactly ONE name:
+# `<command>-<update::platform_tag()>[.exe]` — `ryu-browser-macos-aarch64`,
+# `ryu-browser-linux-x86_64`, `ryu-browser-windows-x86_64.exe` — a single, directly
+# spawnable file with no extension on unix and no extraction step anywhere. The names
+# emitted here differ in the platform slug (`${os}`/`${arch}` expand to `mac`/`arm64`,
+# not `macos`/`aarch64`) AND in being archives/installers, so NOTHING in this release
+# feed is reachable by that code path. That is why `@ryu/browser` was removed from
+# Core's `CORE_PREINSTALLED` (see the note there): seeded-enabled + uninstallable binary =
+# a workspace Browser tab that shows "sidecar unreachable (502)" forever.
+#
+# Do NOT "fix" this by renaming these artifacts to look like `platform_tag()`: the bytes
+# would still be a zip/dmg/AppImage that Core cannot exec, and an Electron app on macOS
+# fundamentally cannot be one executable file. The real fix is to move the manifest
+# sidecar from `local` to `binary`, whose spec already supports `archive` + `binary_name`
+# (`ensure_binary` extracts and execs the inner path) — then these names become the
+# manifest's own `url`, and the platform slug is whatever the manifest says.
+artifactName: ryu-browser-${os}-${arch}.${ext}
+directories:
+  output: artifacts
+  # `resources/` (not the conventional `build/`, which the root .gitignore excludes)
+  # so any tracked build resource reaches CI. If a `resources/icon.png` is added later
+  # electron-builder auto-derives the per-target icons from it; absent one it falls back
+  # to the default Electron icon (a cosmetic follow-on, not a packaging blocker).
+  buildResources: resources
+# electron-vite emits main/preload/renderer bundles into out/; package those plus the
+# manifest. `resources/**` carries any `?asset` files the main bundle references.
+# Everything else (src, dev deps) is excluded. No native module here (unlike island's
+# `uiohook-napi`), so there is nothing to `asarUnpack`.
+files:
+  - out/**
+  - resources/**
+  - package.json
+# Windows: `portable` is the spawnable single-exe target (no install step). It
+# self-extracts to a temp dir on launch, so it IS one file that could be spawned directly
+# as `ryu-browser` — the only target here in that shape. It still isn't installed today:
+# the emitted name is `ryu-browser-win-x64-portable.exe`, not the
+# `ryu-browser-windows-x86_64.exe` the `local` loader asks for (see the header note).
+# This sidecar is Core-driven (lazy spawn + idle-stop), so the interactive NSIS installer
+# island ships for standalone users is intentionally omitted.
+win:
+  target:
+    - portable
+# Stable name (no version) so
+# `releases/latest/download/ryu-browser-windows-<arch>-portable.exe` always resolves,
+# and distinct from any other `.exe` in the release.
+portable:
+  artifactName: ryu-browser-${os}-${arch}-portable.${ext}
+# macOS: ship `zip` plus a `dmg` for manual download. The zip is the form a future
+# `binary`-kind sidecar spec would point at (`archive: "zip"` + `binary_name:
+# "Ryu Browser.app/Contents/MacOS/Ryu Browser"`), which is where the extraction lives —
+# the current `local` loader has no extraction step at all and cannot use either file.
+# `LSUIElement: true` makes it an accessory app (no Dock icon, no app menu):
+# the browser window is Core-driven and incidental (see `src/main/index.ts`), so it runs
+# as a background sidecar like island. Code signing / notarization stays out of scope —
+# unsigned builds run with a Gatekeeper warning; CI signing is a follow-on.
+mac:
+  category: public.app-category.utilities
+  target:
+    - zip
+    - dmg
+  extendInfo:
+    LSUIElement: true
+# Linux: AppImage — a portable, directly-spawnable single file (chmod +x then exec),
+# the Linux analogue of the Windows portable exe.
+linux:
+  category: Utility
+  target:
+    - AppImage
+# Release feed: GitHub releases on the canonical Ryu repo, matching Core's `RYU_REPO`
+# ("amajorai/ryu") and island's publish block — the browser bundles land in the same
+# matching `v{version}` release the desktop, core binaries, and island are mirrored into.
+# Core would download the artifact by its stable name from this repo's `latest` release
+# once the naming/shape mismatch in the header note is resolved; electron-updater is not
+# used either way (Core owns this sidecar's lifecycle, not self-update).
+publish:
+  provider: github
+  owner: amajorai
+  repo: ryu
+  releaseType: release
