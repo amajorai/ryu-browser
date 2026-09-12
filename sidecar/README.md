@@ -1,0 +1,189 @@
+# @ryu/browser-sidecar
+
+A real-Chromium browser (Electron) Ryu runs as a **`local` manifest sidecar**
+(`apps-store/browser/manifest.json`, id `@ryu/browser`). It exposes a
+grant-gated **`browser.control`** capability over a loopback HTTP control server so
+Core (and, through Core's ext-proxy, the desktop Browser panel and agents) can
+observe and drive the same embedded tabs. WebMCP-enabled pages can publish
+structured tools that the agent discovers and invokes in the page's own realm.
+
+## Browser window
+
+The sidecar includes a user-facing Chromium shell with tabs, URL/search
+navigation, back/forward/reload, find-in-page, zoom, device emulation, page
+screenshots, downloads, and a browser menu. The menu also opens settings for
+browsing data, history, downloads, permissions, and password/autofill handoff.
+History and download metadata persist in the local browser profile. Downloaded
+files stay local, and saved passwords are deliberately not exposed to Core or
+agents; the password manager surface remains an OS/browser credential-manager
+boundary.
+
+The Browser setting for agent control is enforced on this server, so disabling it
+blocks protected control routes even when the bearer token is present. Full CDP
+is off by default, marked elevated risk in Developer mode, and requires a restart
+when changed.
+
+## Control API (loopback, bearer-gated)
+
+Bound to `127.0.0.1`. Every route except `GET /health` requires
+`Authorization: Bearer <token>`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness (no auth) — `{ok, version, tabs}` |
+| `GET` | `/` | Capability root (`browser.control`) info |
+| `GET` | `/tabs` | List tabs |
+| `POST` | `/tabs` `{url}` | Open a tab |
+| `DELETE` | `/tabs/:id` | Close a tab |
+| `POST` | `/tabs/:id/navigate` `{url}` | Navigate a tab |
+| `POST` | `/tabs/:id/screenshot` | Base64 PNG of the tab (`capturePage`) |
+| `POST` | `/tabs/:id/eval` `{expression}` | **PRIVILEGED** — run JS in the tab (`executeJavaScript`) |
+| `POST` | `/tabs/:id/snapshot` | Accessibility tree + fresh element refs |
+| `POST` | `/tabs/:id/context` `{selections?,include_screenshot?}` | Live page, viewport, AX snapshot, saved annotations, optional screenshot, and structured DOM context for selections |
+| `GET` | `/tabs/:id/webmcp` | JSON-safe WebMCP tools registered by the active document |
+| `POST` | `/tabs/:id/webmcp/execute` `{tool_name,arguments?}` | Execute one named WebMCP tool in the active document |
+| `POST` | `/tabs/:id/annotations` `{kind,rect,comment,selections?,style?}` | Save a visual annotation with captured element metadata |
+| `DELETE` | `/tabs/:id/annotations` | Clear every annotation on the tab |
+| `DELETE` | `/tabs/:id/annotations/:annotation_id` | Remove one annotation |
+| `GET` | `/tabs/:id/title` | Current document title |
+| `POST` | `/click` `{ref, tab_id?}` | Click a referenced element |
+| `POST` | `/type` `{ref, text, submit?, tab_id?}` | Insert text into a referenced element |
+| `POST` | `/scroll` `{direction, amount?, tab_id?}` | Scroll the viewport |
+| `POST` | `/hover` `{ref, tab_id?}` | Move the pointer over a referenced element |
+| `POST` | `/click-at` `{x,y,button?,count?,tab_id?}` | Click a viewport CSS coordinate |
+| `POST` | `/key` `{keys,tab_id?}` | Press a key or key chord at the focused page |
+| `POST` | `/drag` `{from,to,tab_id?}` | Drag between viewport CSS coordinates |
+
+### Snapshot + synthetic input (CDP)
+
+`snapshot`/`click`/`type`/`scroll` run over the tab's **in-process** CDP session
+(`webContents.debugger` — no debugging port, so they work with `RYU_BROWSER_CDP`
+unset). `Accessibility.getFullAXTree` is flattened into
+`{tab, snapshot_id, elements:[{ref, role, name, value, depth, props}], truncated}`,
+and each `ref` (`@e1`, `@e2`, …) resolves to that element's **`backendDOMNodeId`** —
+deliberately not its `AXNodeId`, whose stability the protocol only promises between
+calls. `click` does `DOM.scrollIntoViewIfNeeded` → `DOM.getBoxModel` → a
+mouseMoved/mousePressed/mouseReleased triple at the box centre; `type` does
+`DOM.focus` → `Input.insertText` (+ a real `Enter` key event when `submit`);
+`scroll` does `Page.getLayoutMetrics` → a `mouseWheel` event at the viewport centre.
+
+Three things follow, and the tool descriptions say so:
+
+- **Refs are per-snapshot.** A new snapshot replaces them and a committed
+  navigation clears them. An unknown ref, or one whose element no longer has a
+  layout box, is a **400** naming the ref and telling the caller to snapshot again —
+  never a fallback to some other element.
+- **`type` appends.** `Input.insertText` writes at the caret; it does not clear an
+  existing value.
+- **Cross-origin iframes are not covered.** `getFullAXTree` on the page session
+  returns the main frame's tree; OOPIF subtrees need their own sessions.
+
+The input and computer-use routes are FLAT (`/click`, not `/tabs/:id/click`) because the
+canonical verbs make `tab_id` optional ("omit for the active tab"), and a
+declarative http tool interpolates a path parameter unconditionally. Whichever tab
+they land on is focused first: an inactive `WebContentsView` is laid out at
+`{0,0,0,0}`, where box models are degenerate and synthetic input hits nothing.
+
+`context` is the shared observation seam for the desktop annotation surface and
+agents. A selection is resolved in CSS pixels against the live Chromium page and
+returns selector/XPath, attributes, safe computed styles, text, role, component
+hint, bounding rectangle, and the matching accessibility ref when available.
+Annotations retain that captured target context plus the user's comment and
+bounded style feedback. They never execute code or expose the privileged `eval`
+route through the canonical capability.
+
+## WebMCP
+
+Every content tab gets a document-start compatibility bridge. On an engine with
+native WebMCP, the bridge observes the native `document.modelContext`; on older
+Chromium it supplies the current imperative API and the deprecated
+`navigator.modelContext` alias. The bridge also recognizes declarative forms with
+`toolname` and `tooldescription`, derives their JSON input schema, populates their
+fields, and honors `toolautosubmit` plus the agent-aware submit response hook.
+
+`GET /tabs/:id/webmcp` returns bounded, JSON-safe metadata from the selected
+tab's top-level document: `name`, `title`,
+`description`, `input_schema`, `origin`, and `annotations`. Page functions and
+`Window` objects never cross into the main process. `POST /tabs/:id/webmcp/execute`
+accepts the exact listed `tool_name` and a JSON object in `arguments`; it invokes
+only that registered tool in that tab, bounds the input/result, and returns the
+result with the page origin. Ryu always marks the result as `untrusted_content`
+and also returns the page's `untrustedContentHint` as
+`untrusted_content_hint`. Both routes use the existing bearer and browser-control
+setting; tool execution is not an arbitrary JavaScript evaluation escape hatch.
+
+## Auth token (fail-closed)
+
+The bearer is resolved as **`RYU_EXT_TOKEN`** (the per-plugin secret Core injects at
+spawn and re-stamps on every proxied hop) **else `RYU_BROWSER_TOKEN`** (standalone/dev
+override). If **neither** is set the server is **fail-closed** — all protected routes
+reject with 401. This mirrors the mail sidecar
+(`apps-store/mail/backend/src/main.rs`).
+
+## Port
+
+`RYU_BROWSER_PORT` (Core injects the profile-shifted value via the manifest's
+`port_env`) else default `7993`, shifted `+1000` under `RYU_PROFILE=dev`.
+
+## CDP
+
+Chromium's remote-debugging port (`:9222`, loopback) is enabled **only** when
+the user enables the full-CDP Developer mode setting (off by default). A restart
+is required after changing the setting. The in-process CDP session used by the
+normal accessibility and computer-use routes remains available without opening
+the remote debugging port.
+
+## Build / test
+
+```bash
+cd apps-store/browser/sidecar
+bun install
+bun run build   # electron-vite build → out/{main,preload,renderer}
+bun test        # control-server routing/auth unit tests (no Electron needed)
+```
+
+## Packaging (`ryu-browser` binary)
+
+`electron-builder.yml` packages the built `out/` into a spawnable, version-less
+artifact — **`ryu-browser-${os}-${arch}`** (mac `zip`+`dmg`, win `-portable.exe`,
+linux `AppImage`) — published to GitHub releases (`amajorai/ryu`), the same feed
+`ryu-core` uses. `dist` runs the `electron-vite build` first, so packaging always
+operates on a fresh `out/`:
+
+```bash
+bun run dist        # build + package for the host platform
+bun run dist:mac    # build + package macOS (zip + dmg)
+bun run dist:win    # build + package Windows (portable exe)
+bun run dist:linux  # build + package Linux (AppImage)
+```
+
+The `dist` scripts invoke `electron-builder` via **`bunx`** (fetched on demand, aligned
+with island's pinned `^26`) rather than a committed devDependency — packaging is a
+manual, release-only step, so this keeps the shared workspace lockfile untouched.
+`electron-builder` itself is **not** run in CI (heavy; needs code-signing certs and a
+display for some steps) — the `electron-vite build` and the control-server unit tests
+are the gates. The config is lint-checked only.
+
+## How Core resolves the binary
+
+Unlike `ryu-mail` (a compiled Rust sibling on `PATH`), this sidecar is an Electron
+app, now **packaged** by `electron-builder` into the `ryu-browser` artifact above. The
+`@ryu/browser` manifest declares `command: "ryu-browser"`, which Core resolves as
+**`RYU_BROWSER_BIN`** (explicit override) else the bare `ryu-browser` on `PATH` — and
+`PATH` includes `~/.ryu/bin`, where Core's managed-companion install drops the
+downloaded artifact (mirroring `ryu-core`'s `install.rs`: download to a temp
+`.download`, then rename into place).
+
+However the binary is launched, it honors the same runtime contract: it binds
+`RYU_BROWSER_PORT` and bearer-authenticates every protected route with
+`RYU_EXT_TOKEN` (else `RYU_BROWSER_TOKEN`) — Core injects both at spawn.
+
+For local dev without a packaged binary, point `RYU_BROWSER_BIN` at a launcher that
+runs Electron on the built main, e.g. a script wrapping:
+
+```bash
+bunx electron apps-store/browser/sidecar/out/main/index.js
+```
+
+Runtime launch is **not** verified in CI (Electron needs a display); the build
+(`electron-vite build`) and the control-server unit tests are the gates.
