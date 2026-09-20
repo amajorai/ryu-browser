@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ryu.browser",
+  "version": "0.1.15",
+  "description": "A real-Chromium browser (Electron) exposed as the grant-gated `browser.control` capability. Local nodes can share one embedded session with the user; managed cloud nodes give each Bot a hidden tab lane inside one persistent managed-Bot Chromium context, so cookies and logins are shared while active tabs stay separate. Core routes the desktop Browser panel and agent tools through its authenticated ext-proxy.",
+  "author": {
+    "name": "Ryu",
+    "url": "https://ryuhq.com"
+  },
+  "homepage": "https://github.com/amajorai/ryu-browser",
+  "repository": "https://github.com/amajorai/ryu-browser",
+  "keywords": ["browser", "chromium", "automation", "web"],
+  "extensions": {
+    "com.ryuhq.ryu": {
+      "id": "@ryu/browser",
+      "displayName": "Browser"
+    }
+  }
+}
