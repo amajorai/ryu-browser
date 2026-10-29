@@ -1,0 +1,39 @@
+{
+  "name": "@ryu/browser-sidecar",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev:standalone": "electron-vite dev",
+    "build": "electron-vite build",
+    "dist": "electron-vite build && bunx electron-builder --config electron-builder.yml",
+    "dist:mac": "electron-vite build && bunx electron-builder --mac --config electron-builder.yml",
+    "dist:win": "electron-vite build && bunx electron-builder --win --config electron-builder.yml",
+    "dist:linux": "electron-vite build && bunx electron-builder --linux --config electron-builder.yml",
+    "preview": "electron-vite preview",
+    "check-types": "tsc --noEmit",
+    "test:unit": "bun test src",
+    "test:e2e:renderer": "node ../../../apps/desktop/node_modules/@playwright/test/cli.js test --config=e2e/browser-shell.playwright.config.ts",
+    "test": "bun run test:unit",
+    "clean": "node ../../../scripts/clean-paths.mjs paths out artifacts && node ../../../scripts/clean-paths.mjs pattern electron-vite"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@ryu/sidecar-runtime": "workspace:*",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "electron": "^42.11.16",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5",
+    "vite": "^6",
+    "@playwright/test": "^1.61.1"
+  },
+  "author": {
+    "name": "A Major Pte. Ltd.",
+    "email": "hello@ryuhq.com"
+  },
+  "homepage": "https://ryuhq.com"
+}

@@ -1,0 +1,96 @@
+appId: ai.amajor.ryu.browser
+productName: Ryu Browser
+# Stable, version-less artifact names: without a pinned name electron-builder emits
+# version-stamped, space-containing defaults ("Ryu Browser 1.0.0.dmg") that no fixed URL
+# resolves. Every target below differs by extension, so one template is unambiguous —
+# except the Windows `portable` `.exe`, which gets an explicit `-portable` override so it
+# never collides with any other `.exe`.
+#
+# These electron-builder names are for manual download only — they are NOT the names
+# Core installs. The `@ryu/browser` manifest declares a `local` sidecar
+# (`command: "ryu-browser"`), and Core's download-on-enable
+# (`manifest_sidecar::ensure_local_sidecar_present`) fetches `update::platform_tag()`
+# names, which the release.yml `browser` job stages from these outputs:
+#   - Linux: the AppImage copied to `ryu-browser-linux-x86_64`;
+#   - Windows: the portable exe copied to `ryu-browser-windows-x86_64.exe`;
+#   - macOS: the `.app` (from `artifacts/mac*/`), ad-hoc signed and tarred as
+#     `ryu-browser-macos-<aarch64|x86_64>.tar.gz`, which the manifest's
+#     `process.bundles.<platform_tag>` entry names together with the `entrypoint`
+#     inside the bundle (`Ryu Browser.app/Contents/MacOS/Ryu Browser`). Core verifies
+#     its `.sha256`, extracts it safely and spawns that entrypoint. If `productName`
+#     changes, update the manifest entrypoint too — the release job fails if the
+#     entrypoint is missing from the tarball.
+# Each asset ships with a `.sha256`. Do NOT rename these artifacts to look like
+# `platform_tag()` names: the staging step owns that mapping.
+artifactName: ryu-browser-${os}-${arch}.${ext}
+directories:
+  output: artifacts
+  # `resources/` (not the conventional `build/`, which the root .gitignore excludes)
+  # so any tracked build resource reaches CI. If a `resources/icon.png` is added later
+  # electron-builder auto-derives the per-target icons from it; absent one it falls back
+  # to the default Electron icon (a cosmetic follow-on, not a packaging blocker).
+  buildResources: resources
+# electron-vite emits main/preload/renderer bundles into out/; package those plus the
+# manifest. `resources/**` carries any `?asset` files the main bundle references.
+# Everything else (src, dev deps) is excluded. No native module here (unlike island's
+# `uiohook-napi`), so there is nothing to `asarUnpack`.
+files:
+  - out/**
+  - resources/**
+  - package.json
+# Electron fuses flipped in the packaged binary. `enableCookieEncryption` makes
+# Chromium encrypt cookie values on disk with its os_crypt key (macOS Keychain,
+# Windows DPAPI, Linux Secret Service/KWallet; see `src/main/profile-storage.ts`
+# for the Linux keyring selection). Off by default in Electron, and one-way:
+# existing plaintext cookies are encrypted as they are rewritten, and turning the
+# fuse off again would leave the cookie store unreadable. Dev runs
+# (`electron-vite dev`) use the stock binary and do not encrypt.
+electronFuses:
+  enableCookieEncryption: true
+# Windows: `portable` is the spawnable single-exe target (no install step). It
+# self-extracts to a temp dir on launch, so it IS one file that could be spawned directly
+# as `ryu-browser`. The release job copies the emitted `ryu-browser-win-x64-portable.exe`
+# to the `ryu-browser-windows-x86_64.exe` name the `local` loader asks for (see the
+# header note).
+# This sidecar is Core-driven (lazy spawn + idle-stop), so the interactive NSIS installer
+# island ships for standalone users is intentionally omitted.
+win:
+  target:
+    - portable
+# Stable name (no version) so
+# `releases/latest/download/ryu-browser-windows-<arch>-portable.exe` always resolves,
+# and distinct from any other `.exe` in the release.
+portable:
+  artifactName: ryu-browser-${os}-${arch}-portable.${ext}
+# macOS: ship `zip` plus a `dmg` for manual download; Core installs the `.app` from
+# the release job's tarball instead (see the header note). `LSUIElement: true` makes
+# it an accessory app (no Dock icon, no app menu): the browser window is Core-driven
+# and incidental (see `src/main/index.ts`), so it runs as a background sidecar like
+# island. No Developer ID signing / notarization in CI: the release job ad-hoc signs
+# the `.app` before tarring it, which is what Apple silicon requires to execute it
+# when it is launched by Core (no quarantine attribute, so no Gatekeeper prompt). The
+# zip/dmg remain unsigned and warn when opened manually.
+mac:
+  category: public.app-category.utilities
+  target:
+    - zip
+    - dmg
+  extendInfo:
+    LSUIElement: true
+# Linux: AppImage — a portable, directly-spawnable single file (chmod +x then exec),
+# the Linux analogue of the Windows portable exe.
+linux:
+  category: Utility
+  target:
+    - AppImage
+# Release feed: GitHub releases on the canonical Ryu repo, matching Core's `RYU_REPO`
+# ("amajorai/ryu") and island's publish block — the browser bundles land in the same
+# matching `v{version}` release the desktop, core binaries, and island are mirrored into.
+# Core downloads the staged `platform_tag()` assets (header note) from this repo's
+# `latest` release; electron-updater is not used (Core owns this sidecar's lifecycle,
+# not self-update).
+publish:
+  provider: github
+  owner: amajorai
+  repo: ryu
+  releaseType: release
