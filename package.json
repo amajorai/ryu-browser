@@ -1,0 +1,8 @@
+{
+  "name": "ryu-browser-satellite",
+  "private": true,
+  "workspaces": [
+    "sidecar",
+    "packages/*"
+  ]
+}
